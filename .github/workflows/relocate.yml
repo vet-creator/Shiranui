@@ -1,4 +1,4 @@
-name: Relocate Shiranui Contents
+name: Relocate
 on:
   workflow_dispatch:
 permissions:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Move contents to root and cleanup
+      - name: Move files
         run: |
           if [ -d "shiranui" ]; then
             cp -rf shiranui/. .
@@ -20,6 +20,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           if ! git diff --staged --quiet; then
-            git commit -m "Relocate shiranui contents to root and remove setup workflow"
+            git commit -m "Relocate shiranui contents"
             git push
           fi
