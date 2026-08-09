@@ -118,31 +118,54 @@ rule Tool_Beacon_Config : c2 tool {
 # ---------------------------------------------------------------------------
 # Living-off-the-land abuse in scripts and droppers.
 # ---------------------------------------------------------------------------
-rule Script_PowerShell_Obfuscated : script lolbin {
+rule Script_PowerShell_Encoded_Stealth : script lolbin {
     meta:
-        severity    = high
+        severity    = medium
         family      = "PowerShell"
-        description = "Encoded, hidden or policy-bypassing PowerShell execution chain"
+        description = "PowerShell invoked with an encoded command together with stealth or policy-bypass flags"
     strings:
-        $ps    = "powershell" nocase ascii wide
-        $pwsh  = "pwsh.exe" nocase ascii wide
-        $enc1  = "-EncodedCommand" nocase ascii wide
-        $enc2  = "FromBase64String" nocase ascii wide
-        $enc3  = " -enc " nocase ascii wide
-        $enc4  = " -ec " nocase ascii wide
-        $exec  = "IEX" ascii wide
-        $iex2  = "Invoke-Expression" nocase ascii wide
-        $net   = "Net.WebClient" nocase ascii wide
-        $dl    = "DownloadString" nocase ascii wide
-        $dl2   = "DownloadFile" nocase ascii wide
-        $hid   = "-WindowStyle Hidden" nocase ascii wide
-        $hid2  = "-w hidden" nocase ascii wide
-        $nop   = "-nop" nocase ascii wide
-        $noni  = "-noni" nocase ascii wide
-        $byp   = "-ExecutionPolicy Bypass" nocase ascii wide
-        $byp2  = "-ep bypass" nocase ascii wide
+        # An encoded command, so the actual instructions are not readable here.
+        $enc1 = "-EncodedCommand" nocase ascii wide
+        $enc2 = " -enc " nocase ascii wide
+        $enc3 = " -ec " nocase ascii wide
+        $enc4 = "FromBase64String" nocase ascii wide
+        # Deliberate concealment of the window or the execution policy.
+        $hid1 = "-WindowStyle Hidden" nocase ascii wide
+        $hid2 = "-w hidden" nocase ascii wide
+        $byp1 = "-ExecutionPolicy Bypass" nocase ascii wide
+        $byp2 = "-ep bypass" nocase ascii wide
     condition:
-        3 of them
+        # Both categories are required. Neither is conclusive alone: automation
+        # tools legitimately pass -EncodedCommand, and installers legitimately
+        # pass -ExecutionPolicy Bypass. Severity is medium for the same reason --
+        # this is corroborating evidence, not a verdict.
+        ($enc1 or $enc2 or $enc3 or $enc4) and ($hid1 or $hid2 or $byp1 or $byp2)
+}
+
+rule Script_PowerShell_Download_Execute : script lolbin {
+    meta:
+        severity    = medium
+        family      = "PowerShell"
+        description = "PowerShell download-and-execute one-liner"
+    strings:
+        # Retrieval.
+        $dl1 = "Net.WebClient).DownloadString" nocase ascii wide
+        $dl2 = "Net.WebClient).DownloadFile" nocase ascii wide
+        $dl3 = "Invoke-WebRequest" nocase ascii wide
+        $dl4 = "DownloadString(" nocase ascii wide
+        # Execution of what was retrieved. A bare "IEX" is not usable as an
+        # indicator: it is three case-sensitive bytes and matches inside ordinary
+        # identifiers such as the POSIX termios constant IEXTEN, which is present
+        # in most Go binaries. Only the call and pipe forms are specific.
+        $x1 = "IEX(" nocase ascii wide
+        $x2 = "IEX (" nocase ascii wide
+        $x3 = "| IEX" nocase ascii wide
+        $x4 = "Invoke-Expression" nocase ascii wide
+    condition:
+        # Installation documentation embedded in a legitimate binary contains this
+        # exact idiom, so static matching cannot separate the two. Medium severity
+        # reflects what the evidence actually supports.
+        ($dl1 or $dl2 or $dl3 or $dl4) and ($x1 or $x2 or $x3 or $x4)
 }
 
 rule Script_PowerShell_Base64_UTF16 : script encoded {
@@ -360,77 +383,58 @@ rule Shellcode_PEB_Walk_x86 : shellcode {
 rule Shellcode_PEB_Walk_x86_Indexed : shellcode {
     meta:
         severity    = high
-        description = "x86 PEB walk through a zeroed base register, corroborated by a PEB_LDR_DATA field access"
+        description = "x86 PEB walk through a zeroed base register, matched as one contiguous instruction sequence"
     strings:
-        # mov r32, fs:[base+0x30]. Every ModRM byte here is enumerated rather than
-        # wildcarded: a wildcard also matches mod=01/rm=100, where the following
-        # byte is a SIB byte and not the 0x30 displacement at all. That imprecision
-        # produced real false positives on Python bytecode during corpus testing.
-        $d8_00 = { 64 8B 40 30 }
-        $d8_01 = { 64 8B 41 30 }
-        $d8_02 = { 64 8B 42 30 }
-        $d8_03 = { 64 8B 43 30 }
-        $d8_04 = { 64 8B 45 30 }
-        $d8_05 = { 64 8B 46 30 }
-        $d8_06 = { 64 8B 47 30 }
-        $d8_07 = { 64 8B 48 30 }
-        $d8_08 = { 64 8B 49 30 }
-        $d8_09 = { 64 8B 4A 30 }
-        $d8_10 = { 64 8B 4B 30 }
-        $d8_11 = { 64 8B 4D 30 }
-        $d8_12 = { 64 8B 4E 30 }
-        $d8_13 = { 64 8B 4F 30 }
-        $d8_14 = { 64 8B 50 30 }
-        $d8_15 = { 64 8B 51 30 }
-        $d8_16 = { 64 8B 52 30 }
-        $d8_17 = { 64 8B 53 30 }
-        $d8_18 = { 64 8B 55 30 }
-        $d8_19 = { 64 8B 56 30 }
-        $d8_20 = { 64 8B 57 30 }
-        $d8_21 = { 64 8B 58 30 }
-        $d8_22 = { 64 8B 59 30 }
-        $d8_23 = { 64 8B 5A 30 }
-        $d8_24 = { 64 8B 5B 30 }
-        $d8_25 = { 64 8B 5D 30 }
-        $d8_26 = { 64 8B 5E 30 }
-        $d8_27 = { 64 8B 5F 30 }
-        $d8_28 = { 64 8B 60 30 }
-        $d8_29 = { 64 8B 61 30 }
-        $d8_30 = { 64 8B 62 30 }
-        $d8_31 = { 64 8B 63 30 }
-        $d8_32 = { 64 8B 65 30 }
-        $d8_33 = { 64 8B 66 30 }
-        $d8_34 = { 64 8B 67 30 }
-        $d8_35 = { 64 8B 68 30 }
-        $d8_36 = { 64 8B 69 30 }
-        $d8_37 = { 64 8B 6A 30 }
-        $d8_38 = { 64 8B 6B 30 }
-        $d8_39 = { 64 8B 6D 30 }
-        $d8_40 = { 64 8B 6E 30 }
-        $d8_41 = { 64 8B 6F 30 }
-        $d8_42 = { 64 8B 70 30 }
-        $d8_43 = { 64 8B 71 30 }
-        $d8_44 = { 64 8B 72 30 }
-        $d8_45 = { 64 8B 73 30 }
-        $d8_46 = { 64 8B 75 30 }
-        $d8_47 = { 64 8B 76 30 }
-        $d8_48 = { 64 8B 77 30 }
-        $d8_49 = { 64 8B 78 30 }
-        $d8_50 = { 64 8B 79 30 }
-        $d8_51 = { 64 8B 7A 30 }
-        $d8_52 = { 64 8B 7B 30 }
-        $d8_53 = { 64 8B 7D 30 }
-        $d8_54 = { 64 8B 7E 30 }
-        $d8_55 = { 64 8B 7F 30 }
-        # PEB->Ldr (+0x0C) and the module lists at +0x14 / +0x1C. Four bytes of
-        # generic x86 on their own, so they only ever act as corroboration.
-        $ldr_a = { 8B 40 0C }
-        $ldr_b = { 8B 70 0C }
-        $ldr_c = { 8B 40 1C }
-        $ldr_d = { 8B 70 1C }
-        $ldr_e = { 8B 40 14 }
+        # Zero a register, then read fs:[reg+0x30]. Encoding the two instructions
+        # as a single pattern is what makes this safe: `64 8B 40 30` on its own is
+        # `mov eax, fs:[rax+0x30]`, an ordinary thread-local-storage access that
+        # appears throughout glibc, libgomp and Go runtimes. Only the tight
+        # zero-then-load pair is characteristic of a position-independent loader.
+        # Both XOR encodings (31 /r and 33 /r) are covered.
+        $z31_eax = { 31 C0 64 8B 40 30 }
+        $z31_ecx = { 31 C9 64 8B 49 30 }
+        $z31_edx = { 31 D2 64 8B 52 30 }
+        $z31_ebx = { 31 DB 64 8B 5B 30 }
+        $z31_ebp = { 31 ED 64 8B 6D 30 }
+        $z31_esi = { 31 F6 64 8B 76 30 }
+        $z31_edi = { 31 FF 64 8B 7F 30 }
+        $z33_eax = { 33 C0 64 8B 40 30 }
+        $z33_ecx = { 33 C9 64 8B 49 30 }
+        $z33_edx = { 33 D2 64 8B 52 30 }
+        $z33_ebx = { 33 DB 64 8B 5B 30 }
+        $z33_ebp = { 33 ED 64 8B 6D 30 }
+        $z33_esi = { 33 F6 64 8B 76 30 }
+        $z33_edi = { 33 FF 64 8B 7F 30 }
+        # The same access followed immediately by a PEB_LDR_DATA field read,
+        # with the loader's usual "keep everything in one register" idiom:
+        #     mov edx, fs:[edx+0x30]   ; PEB
+        #     mov edx, [edx+0x0C]      ; PEB->Ldr
+        # Seven fully specified bytes, and every ModRM value is enumerated rather
+        # than wildcarded. A wildcard would also admit mod=01/rm=100, where the
+        # next byte is a SIB byte and 0x30 is not a displacement at all -- the
+        # exact imprecision that made an earlier version of this rule fire on
+        # ordinary thread-local-storage code.
+        $p0C_eax = { 64 8B 40 30 8B 40 0C }   # PEB->Ldr via eax
+        $p0C_ecx = { 64 8B 49 30 8B 49 0C }   # PEB->Ldr via ecx
+        $p0C_edx = { 64 8B 52 30 8B 52 0C }   # PEB->Ldr via edx
+        $p0C_ebx = { 64 8B 5B 30 8B 5B 0C }   # PEB->Ldr via ebx
+        $p0C_ebp = { 64 8B 6D 30 8B 6D 0C }   # PEB->Ldr via ebp
+        $p0C_esi = { 64 8B 76 30 8B 76 0C }   # PEB->Ldr via esi
+        $p0C_edi = { 64 8B 7F 30 8B 7F 0C }   # PEB->Ldr via edi
+        $p14_eax = { 64 8B 40 30 8B 40 14 }   # InLoadOrder via eax
+        $p14_ecx = { 64 8B 49 30 8B 49 14 }   # InLoadOrder via ecx
+        $p14_edx = { 64 8B 52 30 8B 52 14 }   # InLoadOrder via edx
+        $p14_ebx = { 64 8B 5B 30 8B 5B 14 }   # InLoadOrder via ebx
+        $p14_ebp = { 64 8B 6D 30 8B 6D 14 }   # InLoadOrder via ebp
+        $p14_esi = { 64 8B 76 30 8B 76 14 }   # InLoadOrder via esi
+        $p14_edi = { 64 8B 7F 30 8B 7F 14 }   # InLoadOrder via edi
+        $p1C_eax = { 64 8B 40 30 8B 40 1C }   # InInitOrder via eax
+        $p1C_ecx = { 64 8B 49 30 8B 49 1C }   # InInitOrder via ecx
+        $p1C_edx = { 64 8B 52 30 8B 52 1C }   # InInitOrder via edx
+        $p1C_ebx = { 64 8B 5B 30 8B 5B 1C }   # InInitOrder via ebx
+        $p1C_ebp = { 64 8B 6D 30 8B 6D 1C }   # InInitOrder via ebp
+        $p1C_esi = { 64 8B 76 30 8B 76 1C }   # InInitOrder via esi
+        $p1C_edi = { 64 8B 7F 30 8B 7F 1C }   # InInitOrder via edi
     condition:
-        ($d8_00 or $d8_01 or $d8_02 or $d8_03 or $d8_04 or $d8_05 or $d8_06 or $d8_07 or $d8_08 or $d8_09 or $d8_10 or $d8_11 or $d8_12 or $d8_13 or $d8_14 or $d8_15 or $d8_16 or $d8_17 or $d8_18 or $d8_19 or $d8_20 or $d8_21 or $d8_22 or $d8_23 or $d8_24 or $d8_25 or $d8_26 or $d8_27 or $d8_28 or $d8_29 or $d8_30 or $d8_31 or $d8_32 or $d8_33 or $d8_34 or $d8_35 or $d8_36 or $d8_37 or $d8_38 or $d8_39 or $d8_40 or $d8_41 or $d8_42 or $d8_43 or $d8_44 or $d8_45 or $d8_46 or $d8_47 or $d8_48 or $d8_49 or $d8_50 or $d8_51 or $d8_52 or $d8_53 or $d8_54 or $d8_55)
-        and ($ldr_a or $ldr_b or $ldr_c or $ldr_d or $ldr_e)
-        and filesize < 4MB
+        any of them and filesize < 16MB
 }
