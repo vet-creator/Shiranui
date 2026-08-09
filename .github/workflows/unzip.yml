@@ -1,9 +1,6 @@
 name: Relocate Shiranui Contents
 
 on:
-  push:
-    paths:
-      - '.github/workflows/relocate.yml'
   workflow_dispatch:
 
 permissions:
