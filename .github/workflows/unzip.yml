@@ -1,19 +1,14 @@
 name: Relocate Shiranui Contents
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: write
   workflows: write
-
 jobs:
   relocate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Move contents to root and cleanup
         run: |
           if [ -d "shiranui" ]; then
